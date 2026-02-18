@@ -4,6 +4,34 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // helper for showing temporary messages
+  function showMessage(text, type) {
+    messageDiv.textContent = text;
+    messageDiv.className = type;
+    messageDiv.classList.remove("hidden");
+    setTimeout(() => messageDiv.classList.add("hidden"), 5000);
+  }
+
+  // remove a participant via API
+  async function removeParticipant(activity, email) {
+    try {
+      const resp = await fetch(
+        `/activities/${encodeURIComponent(activity)}/participant?email=${encodeURIComponent(email)}`,
+        { method: "DELETE" }
+      );
+      const result = await resp.json();
+      if (resp.ok) {
+        showMessage(result.message, "success");
+        fetchActivities(); // refresh data
+      } else {
+        showMessage(result.detail || "Failed to remove participant", "error");
+      }
+    } catch (err) {
+      console.error("Error removing participant:", err);
+      showMessage("Network error while removing participant", "error");
+    }
+  }
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -20,11 +48,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const spotsLeft = details.max_participants - details.participants.length;
 
+        // build a little list of signed‑up students (names with remove icons)
+        const participantsHtml = details.participants.length
+          ? `<ul class="participants-list">
+               ${details.participants.map(p => `<li>${p}<span class="remove-icon" data-activity="${name}" data-email="${p}">✖</span></li>`).join("")}
+             </ul>`
+          : `<p class="no-participants">No participants yet</p>`;
+
         activityCard.innerHTML = `
           <h4>${name}</h4>
           <p>${details.description}</p>
           <p><strong>Schedule:</strong> ${details.schedule}</p>
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
+          <p><strong>Participants:</strong></p>
+          ${participantsHtml}
         `;
 
         activitiesList.appendChild(activityCard);
@@ -59,25 +96,25 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
-        messageDiv.textContent = result.message;
-        messageDiv.className = "success";
+        showMessage(result.message, "success");
         signupForm.reset();
       } else {
-        messageDiv.textContent = result.detail || "An error occurred";
-        messageDiv.className = "error";
+        showMessage(result.detail || "An error occurred", "error");
       }
-
-      messageDiv.classList.remove("hidden");
-
-      // Hide message after 5 seconds
-      setTimeout(() => {
-        messageDiv.classList.add("hidden");
-      }, 5000);
     } catch (error) {
       messageDiv.textContent = "Failed to sign up. Please try again.";
       messageDiv.className = "error";
       messageDiv.classList.remove("hidden");
       console.error("Error signing up:", error);
+    }
+  });
+
+  // event delegation for remove icons
+  activitiesList.addEventListener("click", (event) => {
+    if (event.target.classList.contains("remove-icon")) {
+      const activity = event.target.dataset.activity;
+      const email = event.target.dataset.email;
+      removeParticipant(activity, email);
     }
   });
 
